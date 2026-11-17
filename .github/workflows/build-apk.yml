@@ -10,17 +10,22 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.7.2
+    env:
+      HOME: /root
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Шаблоны экспорта
+      - name: Шаблоны и настройки Godot
         run: |
-          mkdir -p ~/.local/share/godot/export_templates
-          if [ -d /root/.local/share/godot/export_templates ]; then
-            cp -r /root/.local/share/godot/export_templates/. ~/.local/share/godot/export_templates/ || true
+          mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
+          if [ "$HOME" != "/root" ]; then
+            cp /root/.config/godot/editor_settings-4.7.tres "$HOME/.config/godot/" || true
+            cp -r /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/" || true
           fi
-          ls ~/.local/share/godot/export_templates
+          echo "HOME=$HOME"
+          cat "$HOME/.config/godot/editor_settings-4.7.tres" || true
+          ls "$HOME/.local/share/godot/export_templates" || true
 
       - name: Ключ подписи
         run: |
