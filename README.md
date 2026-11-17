@@ -1,0 +1,37 @@
+# FPS Proto — заготовка мобильного шутера (Godot 4)
+
+## Структура
+- `scripts/menu.gd` — каркас интерфейса: верхняя панель с профилем, боковое меню, вкладки.
+- `scripts/ui_theme.gd` — палитра и готовые элементы (карточки, кнопки, слайдеры, строки).
+- `scripts/profile.gd` (autoload Профиль) — айди, никнейм, аватарка-identicon, `user://profile.json`.
+- `scripts/settings.gd` (autoload Настройки) — FPS, разрешение рендера, качество, сенса, звук, `user://settings.json`.
+- `scripts/panels/play_panel.gd` — лобби: создать, найти по broadcast (UDP 7777), подключиться по IP (ENet 7778).
+- `scripts/panels/profile_panel.gd` — аватарка, ник, айди с копированием, статистика-заглушка.
+- `scripts/panels/inventory_panel.gd` — сетка скинов с редкостью и деталями.
+- `scripts/panels/settings_panel.gd` — настройки производительности и управления.
+
+## Как открыть
+1. Godot 4.4+ (Android-редактор или ПК).
+2. Import → папка `Documents/GodotProjects/fps_proto` → Import & Edit.
+3. Запустить: появится меню в тёмной теме с оранжевым акцентом.
+
+## Что уже работает
+- Профиль сохраняется между запусками, аватарка стабильная и уникальная.
+- Лобби в одной сети видны друг другу; через ZeroTier тоже (broadcast пробрасывается).
+- Настройки применяются на лету: лимит FPS (`Engine.max_fps`), разрешение 3D-рендера
+  (`scaling_3d_scale`) и MSAA, громкость шины Master, сенса (значение ждёт камеру игрока).
+
+## Где брать карту и ассеты (бесплатно, CC0)
+- kenney.nl — «Prototype Textures», «Grey Box», FPS-киты. Начинать с них.
+- quaternius.com — оружие, персонажи, окружение.
+- polyhaven.com — текстуры и HDRI.
+- itch.io → Game Assets → Free (лицензию читать).
+- Godot Asset Library — прямо из редактора.
+- Карты в стиле Quake: TrenchBroom + func_godot.
+
+## Дальше по коду
+1. `game.tscn`: игрок CharacterBody3D, камера, стрельба, анимации.
+2. Сетевой код с серверной авторитетностью: клиент шлёт ввод, сервер считает.
+3. Спавн по `Profile.uid`, ник над головой, счёт.
+4. Сенса из `Settings.sensitivity` → в чувствительность камеры.
+5. Проверка лобби через ZeroTier на двух устройствах.

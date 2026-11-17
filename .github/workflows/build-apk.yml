@@ -1,0 +1,52 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.7.2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Шаблоны экспорта
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates
+          if [ -d /root/.local/share/godot/export_templates ]; then
+            cp -r /root/.local/share/godot/export_templates/. ~/.local/share/godot/export_templates/ || true
+          fi
+          ls ~/.local/share/godot/export_templates
+
+      - name: Ключ подписи
+        run: |
+          set -e
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore /root/debug.keystore -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          sed -i 's|^keystore/debug=.*|keystore/debug="/root/debug.keystore"|' export_presets.cfg
+          sed -i 's|^keystore/debug_user=.*|keystore/debug_user="androiddebugkey"|' export_presets.cfg
+          sed -i 's|^keystore/debug_password=.*|keystore/debug_password="android"|' export_presets.cfg
+          sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
+          grep -E '^keystore/debug' export_presets.cfg
+
+      - name: Импорт ресурсов
+        run: godot --headless --import || true
+
+      - name: Экспорт APK
+        run: |
+          set -e
+          mkdir -p build
+          godot --headless --verbose --export-debug "Android" build/standoff3.apk
+          ls -lh build
+
+      - name: Отдаём файл
+        uses: actions/upload-artifact@v4
+        with:
+          name: standoff3-apk
+          path: build/*.apk
+          if-no-files-found: error

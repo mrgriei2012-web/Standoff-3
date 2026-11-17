@@ -1,0 +1,18 @@
+build_apk:
+  image: barichello/godot-ci:4.7.2
+  script:
+    - apt-get update -qq
+    - apt-get install -y -qq unzip
+    - mkdir -p src out
+    - ZIP=$(ls *.zip | head -n 1)
+    - unzip -q "$ZIP" -d src
+    - cd $(dirname $(find src -name project.godot | head -n 1))
+    - keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+    - sed -i 's|^keystore/debug=.*|keystore/debug="/root/debug.keystore"|; s|^keystore/debug_user=.*|keystore/debug_user="androiddebugkey"|; s|^keystore/debug_password=.*|keystore/debug_password="android"|' export_presets.cfg
+    - sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
+    - PRESET=$(grep -m1 '^name=' export_presets.cfg | cut -d'"' -f2)
+    - godot --headless --import || true
+    - godot --headless --export-debug "$PRESET" "$CI_PROJECT_DIR/out/standoff3.apk"
+  artifacts:
+    paths:
+      - out/*.apk

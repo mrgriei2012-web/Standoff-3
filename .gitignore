@@ -1,0 +1,12 @@
+# Godot и локальные сборки
+.godot/
+build/
+*.apk
+
+# Android build template: 255 МБ, GitHub не примет такие файлы,
+# а для сборки через CI он не нужен (экспорт без Gradle).
+android/
+
+# Мусор системы
+.nomedia
+export_presets.cfg.bak
