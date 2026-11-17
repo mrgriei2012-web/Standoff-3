@@ -274,10 +274,10 @@ func _build_feed(root: Control) -> void:
 
 	_frags_label = Label.new()
 	_frags_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_frags_label.offset_left = 20
-	_frags_label.offset_top = 14
-	_frags_label.offset_right = 260
-	_frags_label.offset_bottom = 46
+	_frags_label.offset_left = 132
+	_frags_label.offset_top = 20
+	_frags_label.offset_right = 360
+	_frags_label.offset_bottom = 52
 	_frags_label.add_theme_font_size_override("font_size", 18)
 	_frags_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
 	_frags_label.text = "Фраги: 0"
