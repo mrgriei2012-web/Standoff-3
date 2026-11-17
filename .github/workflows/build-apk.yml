@@ -27,6 +27,12 @@ jobs:
           cat "$HOME/.config/godot/editor_settings-4.7.tres" || true
           ls "$HOME/.local/share/godot/export_templates" || true
 
+      - name: Ключ подписи (кэш)
+        uses: actions/cache@v4
+        with:
+          path: /root/debug.keystore
+          key: standoff3-debug-keystore-v1
+
       - name: Ключ подписи
         run: |
           set -e
@@ -43,6 +49,17 @@ jobs:
 
       - name: Импорт ресурсов
         run: godot --headless --import || true
+
+      - name: Проверка скриптов
+        run: |
+          set +e
+          godot --headless --quit-after 120 > /tmp/run.log 2>&1
+          grep -nE "Parse Error|SCRIPT ERROR" /tmp/run.log || echo "ошибок скриптов нет"
+          if grep -q "Parse Error" /tmp/run.log; then
+            echo "::error::GDScript не компилируется, см. лог ниже"
+            tail -60 /tmp/run.log
+            exit 1
+          fi
 
       - name: Экспорт APK
         run: |

@@ -25,6 +25,8 @@ var super_jump := false
 var noclip := false
 var speed_boost := false
 var slowmo := false
+var bot_outline := false
+var rapid_fire := false   # быстрая стрельба (чит-лобби)
 
 
 ## Проверка кода. Возвращает true, если код верный и секреты открылись.
@@ -63,6 +65,8 @@ func load_settings() -> void:
 	noclip = bool(d.get("noclip", false))
 	speed_boost = bool(d.get("speed", false))
 	slowmo = bool(d.get("slowmo", false))
+	bot_outline = bool(d.get("bot_outline", false))
+	rapid_fire = bool(d.get("rapid", false))
 
 
 func save() -> void:
@@ -82,6 +86,8 @@ func save() -> void:
 		"noclip": noclip,
 		"speed": speed_boost,
 		"slowmo": slowmo,
+		"bot_outline": bot_outline,
+		"rapid": rapid_fire,
 	}))
 
 
@@ -98,6 +104,8 @@ func reset_defaults() -> void:
 	noclip = false
 	speed_boost = false
 	slowmo = false
+	bot_outline = false
+	rapid_fire = false
 	apply_all()
 	save()
 

@@ -38,10 +38,30 @@ const WEAPONS := [
 	{
 		"name": "Пистолет", "model": "Pistol",
 		"damage": 22.0, "rpm": 380.0, "mag": 15, "reserve": 60,
-		"depth": -0.40, "length": 0.38, "price": 500,
+		"depth": -0.40, "length": 0.38, "price": 500, "buy": false,
 		"grip": Vector3(0, -0.09, 0.06), "support": Vector3.ZERO, "offhand": false,
 	},
+	# --- слоты, которые не продаются: всегда с собой.
+	{
+		"name": "Нож", "model": "Knife",
+		"damage": 62.0, "rpm": 130.0, "mag": 0, "reserve": 0,
+		"depth": -0.46, "length": 0.34, "price": 0, "buy": false,
+		"grip": Vector3(0, -0.07, 0.05), "support": Vector3.ZERO, "offhand": false,
+		"melee": true, "range": 2.3,
+	},
+	{
+		"name": "Бомба", "model": "Bomb",
+		"damage": 0.0, "rpm": 30.0, "mag": 0, "reserve": 0,
+		"depth": -0.42, "length": 0.30, "price": 0, "buy": false,
+		"grip": Vector3(0, -0.08, 0.04), "support": Vector3.ZERO, "offhand": false,
+		"special": true,
+	},
 ]
+
+## Индексы постоянных слотов в WEAPONS.
+const IDX_PISTOL := 4
+const IDX_KNIFE := 5
+const IDX_BOMB := 6
 
 const RANGE := 250.0
 
@@ -71,6 +91,8 @@ var reserve: int = 120
 var _cam: Camera3D
 var _model: Node3D
 var _fallback: Node3D
+var _fallback_knife: Node3D
+var _fallback_bomb: Node3D
 var _arms: Node3D
 var _flash: OmniLight3D
 var _shot_player: AudioStreamPlayer3D
@@ -89,6 +111,7 @@ var _offhand := true
 var _skin_color := Color(0, 0, 0, 0)
 var _skin_mat: StandardMaterial3D
 var _skins := {}   # имя оружия -> Color скина
+var _ammo_state := {}   # индекс оружия -> [в магазине, в запасе]
 
 var _sleeve: StandardMaterial3D
 var _glove: StandardMaterial3D
@@ -116,6 +139,8 @@ func _ready() -> void:
 	_fallback.position = Vector3(0, -0.02, -0.62)
 	add_child(_fallback)
 	_build_fallback()
+	_build_knife_fallback()
+	_build_bomb_fallback()
 
 	_arms = Node3D.new()
 	add_child(_arms)
@@ -138,20 +163,29 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- выбор оружия
 
-func equip(i: int) -> void:
+func equip(i: int, fresh: bool = false) -> void:
+	# Патроны остаются у своего оружия: переключение не перезаряжает.
+	if not _is_melee() and not _is_special():
+		_ammo_state[index] = [ammo, reserve]
+
 	index = clampi(i, 0, WEAPONS.size() - 1)
 	var w: Dictionary = WEAPONS[index]
 
 	# Ствол ставим так, чтобы приклад не упирался в камеру.
 	_depth = -(0.28 + float(w["length"]) * 0.5)
-	ammo = int(w["mag"])
-	reserve = int(w["reserve"])
+	if fresh:
+		_ammo_state.erase(index)
+	if _ammo_state.has(index):
+		ammo = int(_ammo_state[index][0])
+		reserve = int(_ammo_state[index][1])
+	else:
+		ammo = int(w["mag"])
+		reserve = int(w["reserve"])
 
 	if _model != null:
 		_model.queue_free()
 		_model = null
 
-	_show_fallback(true)
 	_status = "заглушка"
 	_skin_color = _skins.get(weapon_name(), Color(0, 0, 0, 0))
 
@@ -162,9 +196,19 @@ func equip(i: int) -> void:
 	_support = Vector3(sp.x, sp.y, _depth + sp.z)
 	_offhand = bool(w["offhand"])
 
-	var path: String = BASE + str(w["model"]) + ".glb"
-	_try_load_model(path)
+	# Заглушка видна сразу; нож и бомба готовых моделей не имеют.
+	_show_fallback(true)
+	if not _is_melee() and not _is_special():
+		_try_load_model(BASE + str(w["model"]) + ".glb")
 	_rebuild_arms()
+
+
+func _is_melee() -> bool:
+	return bool(WEAPONS[index].get("melee", false))
+
+
+func _is_special() -> bool:
+	return bool(WEAPONS[index].get("special", false))
 
 
 func cycle() -> void:
@@ -192,7 +236,20 @@ func status_text() -> String:
 
 
 func get_ammo_text() -> String:
+	if _is_melee():
+		return "НОЖ"
+	if _is_special():
+		return "C4"
 	return "%d / %d" % [ammo, reserve]
+
+
+## Только то, что продаётся в арсенале (нож и бомба — всегда с собой).
+func get_buy_list() -> Array:
+	var out: Array = []
+	for w in WEAPONS:
+		if bool(w.get("buy", true)):
+			out.append(w)
+	return out
 
 
 func _damage() -> float:
@@ -200,7 +257,10 @@ func _damage() -> float:
 
 
 func _rpm() -> float:
-	return float(WEAPONS[index]["rpm"])
+	var base := float(WEAPONS[index]["rpm"])
+	if Settings.rapid_fire:
+		base *= 3.0
+	return base
 
 
 func _mag() -> int:
@@ -380,8 +440,57 @@ func _hang_side(meshes: Array, box: AABB, axis: int) -> int:
 
 
 func _show_fallback(value: bool) -> void:
+	var melee := _is_melee()
+	var special := _is_special()
 	if _fallback != null:
-		_fallback.visible = value
+		_fallback.visible = value and not melee and not special
+	if _fallback_knife != null:
+		_fallback_knife.visible = value and melee
+	if _fallback_bomb != null:
+		_fallback_bomb.visible = value and special
+
+
+## Нож: лезвие, рукоять, гарда — без готовой модели.
+func _build_knife_fallback() -> void:
+	_fallback_knife = Node3D.new()
+	_fallback_knife.position = Vector3(0.02, -0.05, -0.50)
+	_fallback_knife.rotation_degrees = Vector3(-8, 12, 0)
+	add_child(_fallback_knife)
+
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = Color("cfd8e3")
+	steel.metallic = 0.85
+	steel.roughness = 0.22
+	var grip := StandardMaterial3D.new()
+	grip.albedo_color = Color("23282e")
+	grip.roughness = 0.8
+
+	_part(_fallback_knife, Vector3(0.032, 0.014, 0.30), Vector3(0, 0.02, -0.19), steel)
+	_part(_fallback_knife, Vector3(0.034, 0.042, 0.13), Vector3(0, -0.002, 0.04), grip)
+	_part(_fallback_knife, Vector3(0.085, 0.022, 0.02), Vector3(0, 0.008, -0.03), grip)
+	_fallback_knife.visible = false
+
+
+## Бомба в руках: тёмный блок с красной лампой.
+func _build_bomb_fallback() -> void:
+	_fallback_bomb = Node3D.new()
+	_fallback_bomb.position = Vector3(0.02, -0.08, -0.48)
+	add_child(_fallback_bomb)
+
+	var body := StandardMaterial3D.new()
+	body.albedo_color = Color("2b2f33")
+	body.roughness = 0.7
+	var lamp := StandardMaterial3D.new()
+	lamp.albedo_color = Color("ff3b30")
+	lamp.emission_enabled = true
+	lamp.emission = Color("ff3b30")
+	lamp.emission_energy_multiplier = 1.8
+
+	_part(_fallback_bomb, Vector3(0.22, 0.13, 0.30), Vector3.ZERO, body)
+	_part(_fallback_bomb, Vector3(0.05, 0.09, 0.04), Vector3(-0.05, 0.10, 0.05), body)
+	_part(_fallback_bomb, Vector3(0.22, 0.028, 0.055), Vector3(0, 0.012, 0.02), lamp)
+	_part(_fallback_bomb, Vector3(0.10, 0.02, 0.10), Vector3(0.06, 0.07, -0.04), body)
+	_fallback_bomb.visible = false
 
 
 func _build_fallback() -> void:
@@ -560,21 +669,33 @@ func _save_skins() -> void:
 # ---------------------------------------------------------------- стрельба
 
 func try_shoot() -> void:
-	if _cooldown > 0.0 or ammo <= 0:
+	if _cooldown > 0.0:
+		return
+	if _is_special():
+		return   # бомба не стреляет, её только закладывают
+
+	var melee := _is_melee()
+	if not melee and ammo <= 0:
 		return
 
-	if Settings.inf_ammo:
+	if shooter != null and shooter.has_method("is_alive") and not shooter.is_alive():
+		return
+
+	if Settings.inf_ammo and not melee:
 		ammo = _mag()
 		reserve = maxi(reserve, _mag())
 
-	ammo -= 1
+	if not melee:
+		ammo -= 1
 	_cooldown = 60.0 / _rpm()
-	_recoil = minf(_recoil + 0.035, 0.09)
 
-	if _flash != null:
-		_flash.light_energy = 3.0
-	if _shot_player != null:
-		_shot_player.play()
+	# Нож не стреляет: ни вспышки, ни отдачи, ни звука выстрела.
+	if not melee:
+		_recoil = minf(_recoil + 0.035, 0.09)
+		if _flash != null:
+			_flash.light_energy = 3.0
+		if _shot_player != null:
+			_shot_player.play()
 
 	_cast_shot()
 
@@ -594,7 +715,8 @@ func _cast_shot() -> void:
 
 	var from := _cam.global_position
 	var dir := -_cam.global_transform.basis.z
-	var to := from + dir * RANGE
+	var reach: float = float(WEAPONS[index].get("range", RANGE))
+	var to := from + dir * reach
 
 	var space := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(from, to)
@@ -612,6 +734,23 @@ func _cast_shot() -> void:
 	_spawn_impact(point)
 
 	if collider != null and collider.has_method("take_damage"):
+		var pid := 0
+		if "peer_id" in collider:
+			pid = int(collider.peer_id)
+
+		# Сетевой игрок: урон считает хост, локально только вспышка.
+		if pid > 0:
+			var alive := true
+			if collider.has_method("is_dead"):
+				alive = not collider.is_dead()
+			if alive:
+				Net.report_hit(pid, _damage())
+				if collider.has_method("flash_hit"):
+					collider.call("flash_hit")
+				hit_confirmed.emit()
+				Sfx.play_hit()
+			return
+
 		if collider.has_method("set_last_attacker"):
 			collider.call("set_last_attacker", shooter)
 		collider.call("take_damage", _damage())

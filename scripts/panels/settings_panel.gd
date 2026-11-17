@@ -119,6 +119,10 @@ func _build() -> void:
 			Settings.speed_boost = v))
 		box.add_child(_check("Замедление времени", Settings.slowmo, func(v: bool) -> void:
 			Settings.slowmo = v))
+		box.add_child(_check("Подсветка ботов (не игроков)", Settings.bot_outline, func(v: bool) -> void:
+			Settings.bot_outline = v))
+		box.add_child(_check("Быстрая стрельба", Settings.rapid_fire, func(v: bool) -> void:
+			Settings.rapid_fire = v))
 
 	var reset := UITheme.button("СБРОСИТЬ НАСТРОЙКИ", false, 14)
 	reset.pressed.connect(_on_reset)

@@ -20,6 +20,23 @@ var _death_label: Label
 var _hit_t := 0.0
 var _death_t := 0.0
 
+## Режим матча: счёт, таймер, баннер, кнопки бомбы.
+signal bomb_press(kind: String)
+signal bomb_release
+
+var _score_label: Label
+var _round_label: Label
+var _banner: Label
+var _banner_t := 0.0
+var _plant_btn: Button
+var _defuse_btn: Button
+var _bomb_bar: ProgressBar
+var _cheats_badge: Label
+var _cheat_btn: Button
+var _cheat_root: Control
+var _slot_btns: Array = []
+var _slot_state := ""
+
 
 func _ready() -> void:
 	_build()
@@ -204,6 +221,8 @@ func _build() -> void:
 	_build_hit_marker(root)
 	_build_feed(root)
 	_build_death(root)
+	_build_match_ui(root)
+	_build_weapon_bar(root)
 
 
 ## Полоска здоровья над деньгами.
@@ -307,12 +326,302 @@ func _build_death(root: Control) -> void:
 	_death_box.add_child(_death_label)
 
 
+## ---- режим матча: счёт, таймер, бомба, баннер
+
+func _build_match_ui(root: Control) -> void:
+	_score_label = Label.new()
+	_score_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_score_label.offset_left = -240
+	_score_label.offset_top = 8
+	_score_label.offset_right = 240
+	_score_label.offset_bottom = 40
+	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_score_label.add_theme_font_size_override("font_size", 20)
+	_score_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
+	_score_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_label.visible = false
+	root.add_child(_score_label)
+
+	_round_label = Label.new()
+	_round_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_round_label.offset_left = -240
+	_round_label.offset_top = 40
+	_round_label.offset_right = 240
+	_round_label.offset_bottom = 66
+	_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_round_label.add_theme_font_size_override("font_size", 15)
+	_round_label.add_theme_color_override("font_color", Color("ffcf5c"))
+	_round_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_round_label.visible = false
+	root.add_child(_round_label)
+
+	_cheats_badge = Label.new()
+	_cheats_badge.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_cheats_badge.offset_left = -240
+	_cheats_badge.offset_top = 66
+	_cheats_badge.offset_right = 240
+	_cheats_badge.offset_bottom = 90
+	_cheats_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cheats_badge.add_theme_font_size_override("font_size", 13)
+	_cheats_badge.add_theme_color_override("font_color", Color("ff7a45"))
+	_cheats_badge.text = "ЧИТЫ ВКЛ"
+	_cheats_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cheats_badge.visible = false
+	root.add_child(_cheats_badge)
+
+	_banner = Label.new()
+	_banner.set_anchors_preset(Control.PRESET_CENTER)
+	_banner.offset_left = -400
+	_banner.offset_top = -120
+	_banner.offset_right = 400
+	_banner.offset_bottom = -40
+	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_banner.add_theme_font_size_override("font_size", 28)
+	_banner.add_theme_color_override("font_color", Color("ffd24a"))
+	_banner.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_banner.add_theme_constant_override("outline_size", 8)
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner.modulate.a = 0.0
+	root.add_child(_banner)
+
+	var bomb_box := VBoxContainer.new()
+	bomb_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	bomb_box.offset_left = -180
+	bomb_box.offset_top = -330
+	bomb_box.offset_right = 180
+	bomb_box.offset_bottom = -150
+	bomb_box.add_theme_constant_override("separation", 8)
+	bomb_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bomb_box)
+
+	_bomb_bar = ProgressBar.new()
+	_bomb_bar.min_value = 0.0
+	_bomb_bar.max_value = 1.0
+	_bomb_bar.value = 0.0
+	_bomb_bar.show_percentage = false
+	_bomb_bar.custom_minimum_size = Vector2(0, 12)
+	_bomb_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bomb_bar.visible = false
+
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color("ff7a45")
+	bar_fill.set_corner_radius_all(6)
+	_bomb_bar.add_theme_stylebox_override("fill", bar_fill)
+	var bar_back := StyleBoxFlat.new()
+	bar_back.bg_color = Color(0, 0, 0, 0.5)
+	bar_back.set_corner_radius_all(6)
+	_bomb_bar.add_theme_stylebox_override("background", bar_back)
+	bomb_box.add_child(_bomb_bar)
+
+	_plant_btn = UITheme.button("ЗАЛОЖИТЬ БОМБУ", true, 15)
+	_plant_btn.custom_minimum_size = Vector2(0, 52)
+	_plant_btn.visible = false
+	_plant_btn.button_down.connect(func() -> void: bomb_press.emit("plant"))
+	_plant_btn.button_up.connect(func() -> void: bomb_release.emit())
+	bomb_box.add_child(_plant_btn)
+
+	_defuse_btn = UITheme.button("РАЗМИНИРОВАТЬ", true, 15)
+	_defuse_btn.custom_minimum_size = Vector2(0, 52)
+	_defuse_btn.visible = false
+	_defuse_btn.button_down.connect(func() -> void: bomb_press.emit("defuse"))
+	_defuse_btn.button_up.connect(func() -> void: bomb_release.emit())
+	bomb_box.add_child(_defuse_btn)
+
+	# Меню читов: появляется, только если матч запущен с читами.
+	_cheat_btn = UITheme.button("ЧИТЫ", false, 13)
+	_cheat_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_cheat_btn.offset_left = -108
+	_cheat_btn.offset_top = 12
+	_cheat_btn.offset_right = -16
+	_cheat_btn.offset_bottom = 48
+	_cheat_btn.visible = false
+	_cheat_btn.pressed.connect(func() -> void: _cheat_root.visible = not _cheat_root.visible)
+	root.add_child(_cheat_btn)
+
+	_build_cheat_menu()
+
+
+func _build_cheat_menu() -> void:
+	_cheat_root = Control.new()
+	_cheat_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cheat_root.visible = false
+	_cheat_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_cheat_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed:
+			_cheat_root.visible = false)
+	_cheat_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cheat_root.add_child(center)
+
+	var card := UITheme.card()
+	card.custom_minimum_size = Vector2(300, 0)
+	center.add_child(card)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	card.add_child(box)
+
+	box.add_child(UITheme.heading("Меню читов", 18))
+	box.add_child(UITheme.caption("Только этот матч. ESP по живым игрокам не делаем: это портит игру другим людям."))
+
+	box.add_child(_cheat_check("Неуязвимость", func() -> bool: return Settings.god_mode,
+		func(v: bool) -> void: Settings.god_mode = v))
+	box.add_child(_cheat_check("Бесконечные патроны", func() -> bool: return Settings.inf_ammo,
+		func(v: bool) -> void: Settings.inf_ammo = v))
+	box.add_child(_cheat_check("Супер-прыжок", func() -> bool: return Settings.super_jump,
+		func(v: bool) -> void: Settings.super_jump = v))
+	box.add_child(_cheat_check("Скорость x1.6", func() -> bool: return Settings.speed_boost,
+		func(v: bool) -> void: Settings.speed_boost = v))
+	box.add_child(_cheat_check("Быстрая стрельба", func() -> bool: return Settings.rapid_fire,
+		func(v: bool) -> void: Settings.rapid_fire = v))
+
+	var close := UITheme.button("ЗАКРЫТЬ", true, 15)
+	close.pressed.connect(func() -> void: _cheat_root.visible = false)
+	box.add_child(close)
+
+
+func _cheat_check(title: String, getter: Callable, setter: Callable) -> CheckBox:
+	var c := CheckBox.new()
+	c.text = title
+	c.add_theme_font_size_override("font_size", 15)
+	c.button_pressed = bool(getter.call())
+	c.toggled.connect(func(v: bool) -> void:
+		setter.call(v)
+		Settings.apply_all()
+		Settings.save())
+	return c
+
+
+# ---------------------------------------------------------------- смена оружия
+
+## Панель слотов: 1 основное, 2 пистолет, 3 нож, 4 бомба (только в закладке).
+func _build_weapon_bar(root: Control) -> void:
+	var bar := HBoxContainer.new()
+	bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	bar.offset_left = -230
+	bar.offset_top = -128
+	bar.offset_right = 230
+	bar.offset_bottom = -76
+	bar.add_theme_constant_override("separation", 6)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bar)
+
+	var names := ["1 АВТ", "2 ПИСТ", "3 НОЖ", "4 БОМБА"]
+	for i in names.size():
+		var b := UITheme.button(names[i], false, 12)
+		b.custom_minimum_size = Vector2(0, 46)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.mouse_filter = Control.MOUSE_FILTER_STOP
+		b.pressed.connect(_on_slot_pressed.bind(i + 1))
+		bar.add_child(b)
+		_slot_btns.append(b)
+
+
+func _on_slot_pressed(slot: int) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	if player.equip_slot(slot):
+		_refresh_weapon_bar(true)
+
+
+## Подсветка активного слота. Перерисовываем только при изменениях.
+func _refresh_weapon_bar(force: bool = false) -> void:
+	if _slot_btns.is_empty():
+		return
+	if player == null or not is_instance_valid(player) or player.weapon == null:
+		return
+
+	var active: int = player.current_slot()
+	var has_primary: bool = bool(player.has_primary)
+	var bomb_on: bool = Net.mode == "bomb"
+	var state := "%d|%s|%s" % [active, has_primary, bomb_on]
+	if not force and state == _slot_state:
+		return
+	_slot_state = state
+
+	for i in _slot_btns.size():
+		var slot := i + 1
+		var b: Button = _slot_btns[i]
+		var ok := true
+		if slot == 1:
+			ok = has_primary
+		elif slot == 4:
+			ok = bomb_on
+		b.disabled = not ok
+		b.modulate.a = 1.0 if ok else 0.5
+
+		if slot == active and ok:
+			b.add_theme_stylebox_override("normal", UITheme.box(UITheme.ACCENT, 8))
+			b.add_theme_stylebox_override("hover", UITheme.box(UITheme.ACCENT.lightened(0.1), 8))
+			b.add_theme_color_override("font_color", UITheme.ON_ACCENT)
+			b.add_theme_color_override("font_hover_color", UITheme.ON_ACCENT)
+		else:
+			b.add_theme_stylebox_override("normal", UITheme.box(UITheme.PANEL_ALT, 8, UITheme.BORDER))
+			b.add_theme_stylebox_override("hover", UITheme.box(UITheme.PANEL_ALT.lightened(0.08), 8, UITheme.ACCENT))
+			b.add_theme_color_override("font_color", UITheme.TEXT)
+			b.add_theme_color_override("font_hover_color", UITheme.TEXT)
+
+
+func set_mode_ui(mode: String, cheats: bool) -> void:
+	var team_mode := mode == "tdm" or mode == "bomb"
+	if _score_label != null:
+		_score_label.visible = team_mode
+	if _cheats_badge != null:
+		_cheats_badge.visible = cheats
+	if _cheat_btn != null:
+		_cheat_btn.visible = cheats
+	if _cheat_root != null and not cheats:
+		_cheat_root.visible = false
+	if mode != "bomb":
+		set_bomb_buttons(false, false, 0.0)
+
+
+func set_score(a: int, b: int) -> void:
+	if _score_label == null:
+		return
+	_score_label.text = "АЛЬФА %d  :  %d БРАВО" % [a, b]
+
+
+func set_round_text(text: String) -> void:
+	if _round_label == null:
+		return
+	_round_label.text = text
+	_round_label.visible = text != ""
+
+
+func set_bomb_buttons(show_plant: bool, show_defuse: bool, progress: float) -> void:
+	if _plant_btn != null:
+		_plant_btn.visible = show_plant
+	if _defuse_btn != null:
+		_defuse_btn.visible = show_defuse
+	if _bomb_bar != null:
+		_bomb_bar.visible = progress > 0.0
+		_bomb_bar.value = clampf(progress, 0.0, 1.0)
+
+
+func show_banner(text: String, seconds: float = 3.0) -> void:
+	if _banner == null:
+		return
+	_banner.text = text
+	_banner_t = seconds
+
+
 func _on_hit() -> void:
 	_hit_t = 0.14
 
 
 func _on_player_died() -> void:
-	_death_t = 2.0
+	_death_t = 3.0
 	_death_box.visible = true
 
 
@@ -397,14 +706,14 @@ func _fill_buy() -> void:
 		child.queue_free()
 
 	_buy_list.add_child(UITheme.heading("Арсенал", 22))
-	_buy_list.add_child(UITheme.caption("Чем сильнее ствол, тем дороже. Деньги — за фраги."))
+	_buy_list.add_child(UITheme.caption("Пистолет и нож есть всегда. В закладке бомбы первый раунд — без автомата: деньги за фраги и доход за раунд."))
 
 	if player == null or player.weapon == null:
 		_buy_list.add_child(UITheme.caption("Оружие ещё готовится — открой арсенал через секунду."))
 		_skin_box = null
 		return
 
-	var list: Array = player.weapon.get_list()
+	var list: Array = player.weapon.get_buy_list()
 	for i in list.size():
 		var w: Dictionary = list[i]
 		var btn := UITheme.button("%s    —    $%d" % [str(w["name"]), int(w["price"])], false, 15)
@@ -565,6 +874,11 @@ func _on_exit() -> void:
 
 ## Здоровье, хитмаркер и отсчёт возрождения — всё, что живёт каждый кадр.
 func _update_feedback(delta: float) -> void:
+	if _banner_t > 0.0:
+		_banner_t = maxf(_banner_t - delta, 0.0)
+		if _banner != null:
+			_banner.modulate.a = clampf(_banner_t, 0.0, 1.0)
+
 	if player != null and is_instance_valid(player):
 		var hp: float = clampf(player.health, 0.0, 100.0)
 		if _health_bar != null:
@@ -597,6 +911,7 @@ func _update_feedback(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_update_feedback(delta)
+	_refresh_weapon_bar()
 
 	if player == null or player.weapon == null:
 		return

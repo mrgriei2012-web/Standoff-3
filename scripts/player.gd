@@ -19,6 +19,9 @@ var pitch := 0.0
 var fire_held := false
 var crouch_held := false
 var money := 1600
+## Основное оружие: в дезматче выдаётся сразу, в закладке бомбы — покупается.
+var has_primary := true
+var primary_index := 0
 var health := 100.0
 var input_locked := false
 var last_attacker: Node = null
@@ -37,6 +40,8 @@ var _joy_knob: Panel
 
 
 func _ready() -> void:
+	_setup_actions()
+
 	var shape := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.35
@@ -97,15 +102,86 @@ func set_crouch(value: bool) -> void:
 
 
 ## Покупка оружия. Возвращает true, если денег хватило.
+## Купить можно только основное оружие: нож, пистолет и бомба всегда с собой.
 func buy(i: int) -> bool:
 	if weapon == null:
+		return false
+	if i < 0 or i >= WeaponScript.IDX_PISTOL:
 		return false
 	var cost: int = weapon.price(i)
 	if money < cost:
 		return false
 	money -= cost
-	weapon.equip(i)
+	primary_index = i
+	has_primary = true
+	weapon.equip(i, true)
 	return true
+
+
+## Взять слот 1..4: основное / пистолет / нож / бомба.
+func equip_slot(slot: int) -> bool:
+	if weapon == null:
+		return false
+	match slot:
+		1:
+			if not has_primary:
+				return false
+			weapon.equip(primary_index)
+		2:
+			weapon.equip(WeaponScript.IDX_PISTOL)
+		3:
+			weapon.equip(WeaponScript.IDX_KNIFE)
+		4:
+			if Net.mode != "bomb":
+				return false
+			weapon.equip(WeaponScript.IDX_BOMB)
+		_:
+			return false
+	return true
+
+
+## Номер слота, который сейчас в руках (1..4).
+func current_slot() -> int:
+	if weapon == null:
+		return 1
+	var i: int = weapon.current_index()
+	if i == WeaponScript.IDX_PISTOL:
+		return 2
+	if i == WeaponScript.IDX_KNIFE:
+		return 3
+	if i == WeaponScript.IDX_BOMB:
+		return 4
+	return 1
+
+
+## Клавиши для ПК. На телефоне то же самое делают джойстик и кнопки HUD.
+func _setup_actions() -> void:
+	var keys := {
+		"move_forward": KEY_W,
+		"move_back": KEY_S,
+		"move_left": KEY_A,
+		"move_right": KEY_D,
+		"jump": KEY_SPACE,
+		"crouch": KEY_CTRL,
+		"reload": KEY_R,
+		"weapon_1": KEY_1,
+		"weapon_2": KEY_2,
+		"weapon_3": KEY_3,
+		"weapon_4": KEY_4,
+	}
+	for action in keys.keys():
+		if InputMap.has_action(str(action)):
+			continue
+		InputMap.add_action(str(action))
+		var ev := InputEventKey.new()
+		ev.physical_keycode = int(keys[action])
+		InputMap.action_add_event(str(action), ev)
+
+	if not InputMap.has_action("shoot"):
+		InputMap.add_action("shoot")
+		var mb := InputEventMouseButton.new()
+		mb.button_index = MOUSE_BUTTON_LEFT
+		InputMap.action_add_event("shoot", mb)
 
 
 func is_alive() -> bool:
@@ -188,6 +264,11 @@ func _hide_joy() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Мёртвый лежит до респавна: ни движения, ни стрельбы.
+	if not is_alive():
+		velocity = Vector3.ZERO
+		return
+
 	var want_crouch: bool = Input.is_action_pressed("crouch") or crouch_held
 	var target_y := 1.12 if want_crouch else 1.62
 	camera.position.y = lerpf(camera.position.y, target_y, clampf(delta * 10.0, 0.0, 1.0))
@@ -298,9 +379,9 @@ func _process(delta: float) -> void:
 	if not input_locked and Input.is_action_just_pressed("reload"):
 		weapon.reload()
 
-	for i in 5:
+	for i in 4:
 		if Input.is_action_just_pressed("weapon_%d" % (i + 1)):
-			buy(i)
+			equip_slot(i + 1)
 
 	# 16 раз в секунду сообщаем остальным, где мы и куда смотрим.
 	_net_accum += delta

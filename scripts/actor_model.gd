@@ -19,12 +19,18 @@ var color := Color("ff6b3d")
 var health := 100.0
 var status := ""
 
+## 0 — локальный бот, >0 — сетевой игрок с таким peer_id.
+## Сетевым уроном управляет только хост через Net.
+var peer_id := 0
+
 var _label: Label3D
 var _model: Node3D
 var _meshes: Array = []
 var _flash_mat: StandardMaterial3D
 var _block_mats: Array = []
 var _dead := false
+var _outline_on := false
+var _outline_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -270,6 +276,78 @@ func take_damage(amount: float) -> void:
 
 	if health <= 0.0:
 		_die()
+
+
+func is_dead() -> bool:
+	return _dead
+
+
+## Подпись над головой: ник, дистанция, цвет команды.
+func set_label_text(t: String) -> void:
+	if _label != null and not _dead:
+		_label.text = t
+
+
+func set_label_color(c: Color) -> void:
+	if _label != null:
+		_label.modulate = c
+
+
+## Подсветка силуэта. Используется только для ботов.
+func set_outline(on: bool, col: Color = Color("ff3b30")) -> void:
+	if on == _outline_on:
+		return
+	_outline_on = on
+
+	if _outline_mat == null:
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.no_depth_test = true
+		m.render_priority = 2
+		_outline_mat = m
+
+	_outline_mat.albedo_color = Color(col.r, col.g, col.b, 0.5)
+
+	for mi in _all_meshes():
+		mi.material_overlay = _outline_mat if on else null
+
+
+func _all_meshes() -> Array:
+	var out: Array = []
+	for child in get_children():
+		if child is MeshInstance3D:
+			out.append(child)
+		elif child is Node3D:
+			out.append_array(_find_meshes(child))
+	return out
+
+
+## Короткая вспышка без урона — для попаданий по сетевым игрокам.
+func flash_hit() -> void:
+	_tint(true)
+
+
+## Смерть и возрождение сетевого игрока. Вызывает только game.gd
+## после того, как хост разослал событие.
+func set_network_dead(dead: bool) -> void:
+	if dead:
+		if _dead:
+			return
+		_dead = true
+		_label.text = nick + " — убит"
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(self, "rotation_degrees:x", 90.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(_label, "position:y", 0.9, 0.35)
+		return
+
+	health = 100.0
+	_dead = false
+	rotation_degrees = Vector3.ZERO
+	_label.position = Vector3(0, 2.05, 0)
+	_label.text = nick
+	_tint(false)
 
 
 func _tint(value: bool) -> void:

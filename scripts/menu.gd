@@ -8,17 +8,24 @@ const SettingsPanel := preload("res://scripts/panels/settings_panel.gd")
 
 const TAB_TITLES := ["Играть", "Профиль", "Настройки"]
 
+## Ссылка на Telegram-канал. Когда будет готова — вписать сюда, и всё.
+const TG_URL := "https://t.me/arctgha"
+const TG_SEEN_PATH := "user://tg_invite.cfg"
+
 var _tab_buttons: Array = []
 var _panels: Array = []
 var _nick_label: Label
 var _id_label: Label
 var _avatar: TextureRect
+var _tg_root: Control
+var _tg_waiting := false
 
 
 func _ready() -> void:
 	_build()
 	Profile.profile_changed.connect(_refresh_profile)
 	_select_tab(0)
+	_maybe_show_tg()
 
 
 func _build() -> void:
@@ -141,3 +148,91 @@ func _refresh_profile() -> void:
 	_nick_label.text = Profile.nickname
 	_id_label.text = "ID: " + Profile.uid
 	_avatar.texture = Profile.make_avatar(Profile.uid, 64)
+
+
+# ---------------------------------------------------------------- приглашение в Telegram
+
+## Показываем один раз: пока человек не нажмёт «Подписаться» и не вернётся.
+func _maybe_show_tg() -> void:
+	if _tg_seen():
+		return
+	await get_tree().create_timer(0.8).timeout
+	if not is_inside_tree() or _tg_seen() or _tg_root != null:
+		return
+	_build_tg()
+
+
+func _build_tg() -> void:
+	_tg_root = Control.new()
+	_tg_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tg_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_tg_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_tg_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tg_root.add_child(center)
+
+	var card := UITheme.card()
+	card.custom_minimum_size = Vector2(430, 0)
+	center.add_child(card)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	card.add_child(box)
+
+	box.add_child(UITheme.heading("standoff 3", 26))
+
+	var text := UITheme.label("Канал @arctgha — новые режимы, карты и свежие сборки APK. Подпишись, чтобы не пропустить обновление.", 15)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.custom_minimum_size = Vector2(390, 0)
+	box.add_child(text)
+
+	var go := UITheme.button("ПОДПИСАТЬСЯ В TELEGRAM", true, 17)
+	go.custom_minimum_size = Vector2(0, 66)
+	go.pressed.connect(_on_tg_go)
+	box.add_child(go)
+
+	var later := UITheme.button("Позже", false, 13)
+	later.pressed.connect(func() -> void: _close_tg(false))
+	box.add_child(later)
+
+
+func _on_tg_go() -> void:
+	_tg_waiting = true
+	OS.shell_open(TG_URL)
+
+
+func _close_tg(mark_seen: bool) -> void:
+	_tg_waiting = false
+	if _tg_root != null and is_instance_valid(_tg_root):
+		_tg_root.queue_free()
+	_tg_root = null
+	if mark_seen:
+		_tg_mark_seen()
+
+
+## Вернулись из Telegram — приглашение больше не показываем.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN or what == NOTIFICATION_APPLICATION_RESUMED:
+		if _tg_waiting and _tg_root != null and is_instance_valid(_tg_root):
+			_close_tg(true)
+
+
+func _tg_seen() -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(TG_SEEN_PATH) != OK:
+		return false
+	return bool(cfg.get_value("tg", "seen", false))
+
+
+func _tg_mark_seen() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("tg", "seen", true)
+	cfg.save(TG_SEEN_PATH)

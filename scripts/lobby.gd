@@ -9,9 +9,12 @@ const MAPS := [
 
 const TEAM_NAMES := ["АЛЬФА", "БРАВО"]
 const TEAM_COLORS := [Color("ff6b3d"), Color("4aa3ff")]
+const MODE_NAMES := ["Все против всех", "Командный бой", "Закладка бомбы", "ХВХ (читы)"]
 
 var _players_box: VBoxContainer
 var _map_opt: OptionButton
+var _mode_opt: OptionButton
+var _cheats_check: CheckBox
 var _start_btn: Button
 var _host_box: VBoxContainer
 var _status: Label
@@ -123,6 +126,23 @@ func _build() -> void:
 	_map_opt.item_selected.connect(_on_map_selected)
 	map_row.add_child(_map_opt)
 
+	# режим матча
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 10)
+	_host_box.add_child(mode_row)
+	mode_row.add_child(UITheme.label("Режим", 15))
+
+	_mode_opt = UITheme.option(MODE_NAMES, 0)
+	_mode_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mode_opt.item_selected.connect(_on_mode_selected)
+	mode_row.add_child(_mode_opt)
+
+	_cheats_check = CheckBox.new()
+	_cheats_check.text = "Читы для всех (без ESP)"
+	_cheats_check.add_theme_font_size_override("font_size", 14)
+	_cheats_check.toggled.connect(_on_cheats)
+	_host_box.add_child(_cheats_check)
+
 	_start_btn = UITheme.button("НАЧАТЬ МАТЧ", true, 17)
 	_start_btn.custom_minimum_size = Vector2(0, 56)
 	_start_btn.pressed.connect(Net.start_match)
@@ -163,6 +183,9 @@ func _refresh() -> void:
 	if is_host:
 		_ip_label.text = "IP: %s:%d" % [_local_ip(), Net.GAME_PORT]
 		_set_map_selection(Net.map_id)
+		_set_mode_selection(Net.mode)
+		if _cheats_check != null:
+			_cheats_check.button_pressed = Net.cheats
 	else:
 		_ip_label.text = "ждём хоста"
 
@@ -206,9 +229,32 @@ func _set_map_selection(id: String) -> void:
 			return
 
 
+func _set_mode_selection(id: String) -> void:
+	for i in Net.MODES.size():
+		if str(Net.MODES[i]) == id:
+			if _mode_opt != null and _mode_opt.selected != i:
+				_mode_opt.selected = i
+			return
+
+
 func _on_map_selected(index: int) -> void:
 	if Net.is_host:
 		Net.set_map(str(MAPS[index][0]))
+
+
+func _on_mode_selected(index: int) -> void:
+	if not Net.is_host or index < 0 or index >= Net.MODES.size():
+		return
+	Net.set_mode(str(Net.MODES[index]))
+	# ХВХ — это тот же deathmatch, но с включённым меню читов.
+	if str(Net.MODES[index]) == "hvh" and _cheats_check != null:
+		_cheats_check.button_pressed = true
+		Net.set_cheats(true)
+
+
+func _on_cheats(on: bool) -> void:
+	if Net.is_host:
+		Net.set_cheats(on)
 
 
 func _on_leave() -> void:
