@@ -25,9 +25,11 @@ jobs:
       - name: Ключ подписи
         run: |
           set -e
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
-            -keystore /root/debug.keystore -storepass android \
-            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          if [ ! -f /root/debug.keystore ]; then
+            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+              -keystore /root/debug.keystore -storepass android \
+              -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          fi
           sed -i 's|^keystore/debug=.*|keystore/debug="/root/debug.keystore"|' export_presets.cfg
           sed -i 's|^keystore/debug_user=.*|keystore/debug_user="androiddebugkey"|' export_presets.cfg
           sed -i 's|^keystore/debug_password=.*|keystore/debug_password="android"|' export_presets.cfg
